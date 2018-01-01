@@ -8,10 +8,9 @@ def rand(a,b):
 def dataStandize(indata): # define method to standize training data
     temp = list(zip(*indata))  
     r,c = len(temp), len(temp[0])
-    mValue = [np.mean(i)*0 for i in temp]
-    sValue = [np.std(i)**0 for i in temp] 
+    mValue = [np.mean(i) for i in temp]
+    sValue = [np.std(i) for i in temp] 
     ret = [[(temp[i][j]-mValue[i])/sValue[i] for i in range(r)] for j in range(c)]
-    #print(mValue,sValue)
     return ret, mValue, sValue
 def dataStandize2(indata,mValue, sValue): # define method to standize test data with the parameters as [dataStandize]
     temp = list(zip(*indata))    
@@ -61,11 +60,12 @@ class Unit:
         return self.out
     def update(self, alpha, change):    
         #pdb.set_trace()
-        self.weight = [i - alpha * change * j for i, j in zip(self.weight, self.indata)] 
-        self.bias = self.bias - alpha * change  
-    def getweight(self):
-        return self.weight
-
+        self.change = change
+        self.weight = [i + alpha * change * j for i, j in zip(self.weight, self.indata)] 
+        self.bias = self.bias + alpha * change      
+    def getinfo(self):        
+        ret =  self.change, ['w: %.4f,in: %.4f\n'%(i,j) for i,j in zip(self.weight, self.indata)]
+        return ret
 # define a new class of neural layer
 class Layer:
     def __init__(self, num_input, num_output, actfun):
@@ -74,7 +74,8 @@ class Layer:
         self.innum = num_input
     def calc(self, indata):
         self.indata = indata  
-        self.out = [unit.calc(self.indata) for unit in self.units]
+        self.out = [unit.calc(self.indata) for unit in self.units]        
+        #pdb.set_trace()
         return self.out
     def update(self, alpha, changes):
         for unit, change in zip(self.units, changes):
@@ -83,7 +84,10 @@ class Layer:
         def _error(deltas, j):
             return sum([delta * unit.weight[j] for delta, unit in zip(deltas, self.units)])
         return [_error(deltas, j) for j  in range(self.innum)]
-
+    def getinfo(self):
+        ret =  [unit.getinfo() for unit in self.units]        
+        #pdb.set_trace()
+        return ret
 # define a new class of neural network
 class Nnet:
     def __init__(self, ni, nh, no, actfun):
@@ -102,10 +106,10 @@ class Nnet:
         for i in range(len(self.nh)):
             self.ah.append(self.hlayer[i].calc(temp))
             temp = self.ah[-1]
-        self.ao = self.olayer.calc(self.ah[-1])  
+        self.ao = self.olayer.calc(self.ah[-1]) 
         return self.ao
     def getmse(self, output):
-        self.dev = [-(i - j) for i,j in zip(output, self.ao)]
+        self.dev = [(i - j) for i,j in zip(output, self.ao)]
         self.mse = sum([i**2 for i in self.dev])
         return self.mse
     def update(self, alpha):
@@ -117,17 +121,25 @@ class Nnet:
         self.olayer.update(alpha, out_deltas)
         for i in range(len(self.nh)-1,-1,-1):
             self.hlayer[i].update(alpha, hid_deltas[i])
+    def getinfo(self):
+        alllayer = [layer for layer in self.hlayer] + [self.olayer]
+        return '%.4f'%self.dev[0], [layer.getinfo() for layer in alllayer]
 
     def train(self, trainX, trainY, iterations = 1000, alpha=1):
         if len(trainX[0]) != self.ni or len(trainY[0]) != self.no or len(trainX) != len(trainY):
             raise ValueError('wrong scale of training data')
+        fout = open('traininfo.txt','w+')
         for i in range(iterations):
             mse = 0
             for j in range(len(trainX)):    
                 self.calc(trainX[j])
                 mse = mse + self.getmse(trainY[j])
-                alpha = j+1
-                self.update(10/alpha)
+                alpha = 0.1    
+                self.update(1)
+                info = self.getinfo()
+                fout.write('\n****** iteration = %1d ******\n'%j)
+                fout.write(str(info))
+                #pdb.set_trace()
             if i % 100 == 0:
                 print('training mse is %2f', mse/len(trainX))
     def test(self, testX):        
@@ -138,15 +150,15 @@ def bpnn(TrainX,TrainY,TestX):
     Xr_num,Xc_num = len(TrainX), len(TrainX[0]) # number of training inputs and the dimension of each input
     Yr_num,Yc_num = len(TrainY), len(TrainY[0]) # number of training outputs and the dimension of each output
     Xr_num2,Xc_num2 = len(TestX), len(TestX[0]) # number of test inputs and the dimension of each input
-    TrainX, xmValue, xsValue = dataStandize(TrainX)
-    TrainY, ymValue, ysValue = dataStandize(TrainY)
-    TestX = dataStandize2(TestX,xmValue, xsValue)
+    #TrainX, xmValue, xsValue = dataStandize(TrainX)
+    #TrainY, ymValue, ysValue = dataStandize(TrainY)
+    #TestX = dataStandize2(TestX,xmValue, xsValue)
     funGroup = {'sigmoid': sigmoid, 'tanh': tanh, 'relu': relu}
     actfun = funGroup['sigmoid']
-    n = Nnet(1, [10,10,10], 1, actfun)
+    n = Nnet(1, [10], 1, actfun)
     n.train(TrainX, TrainY)
     ret = n.test(TestX)
-    return dataOppStandize(ret,ymValue, ysValue)  
+    return ret #dataOppStandize(ret,ymValue, ysValue)  
 
 
 
